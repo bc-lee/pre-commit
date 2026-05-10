@@ -404,6 +404,39 @@ class NotAllowed(cfgv.OptionalNoDefault):
             raise cfgv.ValidationError(f'{self.key!r} cannot be overridden')
 
 
+class PythonLockfile(NamedTuple):
+    key: str
+    default: str | None
+
+    def check(self, dct: dict[str, Any]) -> None:
+        if self.key not in dct:
+            return
+
+        with cfgv.validate_context(f'At key: {self.key}'):
+            cfgv.check_string(dct[self.key])
+
+        if dct.get('additional_dependencies'):
+            raise cfgv.ValidationError(
+                f'{self.key!r} cannot be combined with '
+                f"'additional_dependencies'",
+            )
+
+        if (
+                'language' in dct and
+                _translate_language(dct['language']) != 'python'
+        ):
+            raise cfgv.ValidationError(
+                f'{self.key!r} is only supported for language: python',
+            )
+
+    def apply_default(self, dct: dict[str, Any]) -> None:
+        if self.default is not None:
+            dct.setdefault(self.key, self.default)
+
+    def remove_default(self, dct: dict[str, Any]) -> None:
+        raise NotImplementedError
+
+
 _COMMON_HOOK_WARNINGS = (
     OptionalSensibleRegexAtHook('files', cfgv.check_string),
     OptionalSensibleRegexAtHook('exclude', cfgv.check_string),
@@ -454,12 +487,14 @@ CONFIG_HOOK_DICT = cfgv.Map(
     ),
     StagesMigrationNoDefault('stages', []),
     LanguageMigration('language', cfgv.check_one_of(language_names)),  # remove
+    PythonLockfile('python_lockfile', None),
     *_COMMON_HOOK_WARNINGS,
 )
 LOCAL_HOOK_DICT = cfgv.Map(
     'Hook', 'id',
 
     *MANIFEST_HOOK_DICT.items,
+    PythonLockfile('python_lockfile', ''),
     *_COMMON_HOOK_WARNINGS,
 )
 CONFIG_REPO_DICT = cfgv.Map(

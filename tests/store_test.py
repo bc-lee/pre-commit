@@ -261,6 +261,9 @@ def test_create_when_store_already_exists(store):
 def test_db_repo_name(store):
     assert store.db_repo_name('repo', ()) == 'repo'
     assert store.db_repo_name('repo', ('b', 'a', 'c')) == 'repo:b,a,c'
+    assert store.db_repo_name(
+        'repo', (), 'a' * 64,
+    ) == f'repo:python_lockfile_sha256={"a" * 64}'
 
 
 def test_local_resources_reflects_reality():

@@ -123,21 +123,32 @@ class Store:
                 yield db
 
     @classmethod
-    def db_repo_name(cls, repo: str, deps: Sequence[str]) -> str:
+    def db_repo_name(
+            cls,
+            repo: str,
+            deps: Sequence[str],
+            python_lockfile_sha256: str = '',
+    ) -> str:
         if deps:
-            return f'{repo}:{",".join(deps)}'
+            ret = f'{repo}:{",".join(deps)}'
         else:
-            return repo
+            ret = repo
+
+        if python_lockfile_sha256:
+            return f'{ret}:python_lockfile_sha256={python_lockfile_sha256}'
+
+        return ret
 
     def _new_repo(
             self,
             repo: str,
             ref: str,
             deps: Sequence[str],
+            python_lockfile_sha256: str,
             make_strategy: Callable[[str], None],
     ) -> str:
         original_repo = repo
-        repo = self.db_repo_name(repo, deps)
+        repo = self.db_repo_name(repo, deps, python_lockfile_sha256)
 
         def _get_result() -> str | None:
             # Check if we already exist
@@ -192,7 +203,13 @@ class Store:
             '--depth=1',
         )
 
-    def clone(self, repo: str, ref: str, deps: Sequence[str] = ()) -> str:
+    def clone(
+            self,
+            repo: str,
+            ref: str,
+            deps: Sequence[str] = (),
+            python_lockfile_sha256: str = '',
+    ) -> str:
         """Clone the given url and checkout the specific ref."""
 
         def clone_strategy(directory: str) -> None:
@@ -207,11 +224,18 @@ class Store:
             except CalledProcessError:
                 self._complete_clone(ref, _git_cmd)
 
-        return self._new_repo(repo, ref, deps, clone_strategy)
-
-    def make_local(self, deps: Sequence[str]) -> str:
         return self._new_repo(
-            'local', C.LOCAL_REPO_VERSION, deps, _make_local_repo,
+            repo, ref, deps, python_lockfile_sha256, clone_strategy,
+        )
+
+    def make_local(
+            self,
+            deps: Sequence[str],
+            python_lockfile_sha256: str = '',
+    ) -> str:
+        return self._new_repo(
+            'local', C.LOCAL_REPO_VERSION, deps, python_lockfile_sha256,
+            _make_local_repo,
         )
 
     def _create_configs_table(self, db: sqlite3.Connection) -> None:

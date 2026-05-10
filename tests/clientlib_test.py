@@ -435,6 +435,53 @@ def test_valid_manifests(manifest_obj):
     assert is_valid_according_to_schema(manifest_obj, MANIFEST_SCHEMA)
 
 
+def test_python_lockfile_valid_for_local_python_hook():
+    cfg = sample_local_config()
+    cfg['hooks'][0].update({
+        'entry': 'python hook.py',
+        'language': 'python',
+        'python_lockfile': 'requirements.txt',
+    })
+
+    cfgv.validate(cfg, CONFIG_REPO_DICT)
+
+
+def test_python_lockfile_valid_for_config_hook():
+    cfg = {
+        'repo': 'https://example.invalid/repo',
+        'rev': 'v1.0.0',
+        'hooks': [{'id': 'hook', 'python_lockfile': 'requirements.txt'}],
+    }
+
+    cfgv.validate(cfg, CONFIG_REPO_DICT)
+
+
+@pytest.mark.parametrize('language', ('system', 'node'))
+def test_python_lockfile_invalid_for_non_python_local_hook(language):
+    cfg = sample_local_config()
+    cfg['hooks'][0].update({
+        'entry': 'echo hi',
+        'language': language,
+        'python_lockfile': 'requirements.txt',
+    })
+
+    with pytest.raises(cfgv.ValidationError):
+        cfgv.validate(cfg, CONFIG_REPO_DICT)
+
+
+def test_python_lockfile_invalid_with_additional_dependencies():
+    cfg = sample_local_config()
+    cfg['hooks'][0].update({
+        'entry': 'python hook.py',
+        'language': 'python',
+        'additional_dependencies': ['astpretty'],
+        'python_lockfile': 'requirements.txt',
+    })
+
+    with pytest.raises(cfgv.ValidationError):
+        cfgv.validate(cfg, CONFIG_REPO_DICT)
+
+
 @pytest.mark.parametrize(
     'config_repo',
     (

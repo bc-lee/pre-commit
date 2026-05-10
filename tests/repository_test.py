@@ -15,6 +15,7 @@ from pre_commit import lang_base
 from pre_commit.all_languages import languages
 from pre_commit.clientlib import CONFIG_SCHEMA
 from pre_commit.clientlib import load_manifest
+from pre_commit.errors import FatalError
 from pre_commit.hook import Hook
 from pre_commit.languages import python
 from pre_commit.languages import unsupported
@@ -55,10 +56,65 @@ def _get_hook_no_install(repo_config, store, hook_id):
     return hook
 
 
+def _config_with_repo(repo_config):
+    config = {'repos': [repo_config]}
+    config = cfgv.validate(config, CONFIG_SCHEMA)
+    return cfgv.apply_defaults(config, CONFIG_SCHEMA)
+
+
 def _get_hook(repo_config, store, hook_id):
     hook = _get_hook_no_install(repo_config, store, hook_id)
     install_hook_envs([hook], store)
     return hook
+
+
+def test_python_lockfile_changes_store_key(tempdir_factory, store, tmp_path):
+    path = make_repo(tempdir_factory, 'python_hooks_repo')
+    config_file = tmp_path.joinpath(C.CONFIG_FILE)
+    lockfile = tmp_path.joinpath('requirements.txt')
+    lockfile.write_text('identify==2.6.10\n')
+    config_file.write_text('')
+
+    config = make_config_from_repo(path)
+    config['hooks'][0]['python_lockfile'] = 'requirements.txt'
+    hook1, = all_hooks(_config_with_repo(config), store, str(config_file))
+
+    lockfile.write_text('identify==2.6.11\n')
+    hook2, = all_hooks(_config_with_repo(config), store, str(config_file))
+
+    assert hook1.python_lockfile_sha256 != hook2.python_lockfile_sha256
+    assert hook1.prefix != hook2.prefix
+
+
+def test_python_lockfiles_do_not_collide(tempdir_factory, store, tmp_path):
+    path = make_repo(tempdir_factory, 'python_hooks_repo')
+    config_file = tmp_path.joinpath(C.CONFIG_FILE)
+    config_file.write_text('')
+    tmp_path.joinpath('requirements-1.txt').write_text('identify==2.6.10\n')
+    tmp_path.joinpath('requirements-2.txt').write_text('identify==2.6.11\n')
+
+    config = make_config_from_repo(path)
+    config['hooks'].append(dict(config['hooks'][0]))
+    config['hooks'][0]['python_lockfile'] = 'requirements-1.txt'
+    config['hooks'][1]['python_lockfile'] = 'requirements-2.txt'
+    hooks = all_hooks(_config_with_repo(config), store, str(config_file))
+
+    assert hooks[0].prefix != hooks[1].prefix
+
+
+def test_python_lockfile_missing_fails(tempdir_factory, store, tmp_path):
+    path = make_repo(tempdir_factory, 'python_hooks_repo')
+    config_file = tmp_path.joinpath(C.CONFIG_FILE)
+    config_file.write_text('')
+
+    config = make_config_from_repo(path)
+    config['hooks'][0]['python_lockfile'] = 'requirements.txt'
+
+    with pytest.raises(FatalError) as excinfo:
+        all_hooks(_config_with_repo(config), store, str(config_file))
+
+    msg = str(excinfo.value)
+    assert 'Could not read python_lockfile for hook `foo`' in msg
 
 
 def _test_hook_repo(
@@ -415,6 +471,8 @@ def test_manifest_hooks(tempdir_factory, store):
         src=f'file://{path}',
         prefix=Prefix(mock.ANY),
         additional_dependencies=[],
+        python_lockfile='',
+        python_lockfile_sha256='',
         alias='',
         always_run=False,
         args=[],

@@ -24,6 +24,8 @@ class Hook(NamedTuple):
     types_or: Sequence[str]
     exclude_types: Sequence[str]
     additional_dependencies: Sequence[str]
+    python_lockfile: str
+    python_lockfile_sha256: str
     args: Sequence[str]
     always_run: bool
     fail_fast: bool
@@ -37,12 +39,13 @@ class Hook(NamedTuple):
     verbose: bool
 
     @property
-    def install_key(self) -> tuple[Prefix, str, str, tuple[str, ...]]:
+    def install_key(self) -> tuple[Prefix, str, str, tuple[str, ...], str]:
         return (
             self.prefix,
             self.language,
             self.language_version,
             tuple(self.additional_dependencies),
+            self.python_lockfile_sha256,
         )
 
     @classmethod
