@@ -7,6 +7,7 @@ from unittest import mock
 import pytest
 
 import pre_commit.constants as C
+from pre_commit import lang_base
 from pre_commit.envcontext import envcontext
 from pre_commit.languages import python
 from pre_commit.prefix import Prefix
@@ -178,6 +179,34 @@ def test_healthy_venv_creator(python_dir):
         python.install_environment(prefix, C.DEFAULT, ())
 
     assert python.health_check(prefix, C.DEFAULT) is None
+
+
+def test_install_environment_locked_uses_pip(python_dir):
+    prefix, _ = python_dir
+    lockfile = '/path/to/requirements.txt'
+
+    with (
+            mock.patch.object(python, 'cmd_output_b') as cmd_output_b,
+            mock.patch.object(lang_base, 'setup_cmd') as setup_cmd,
+    ):
+        python.install_environment_locked(prefix, C.DEFAULT, lockfile)
+
+    cmd_output_b.assert_called_once_with(
+        sys.executable, '-mvirtualenv', prefix.path('py_env-default'), cwd='/',
+    )
+    setup_cmd.assert_has_calls((
+        mock.call(
+            prefix,
+            ('python', '-mpip', 'install', '--require-hashes', '-r', lockfile),
+        ),
+        mock.call(
+            prefix,
+            (
+                'python', '-mpip', 'install',
+                '--no-deps', '--no-build-isolation', '.',
+            ),
+        ),
+    ))
 
 
 def test_unhealthy_python_goes_missing(python_dir):

@@ -226,3 +226,29 @@ def install_environment(
     cmd_output_b(*venv_cmd, cwd='/')
     with in_env(prefix, version):
         lang_base.setup_cmd(prefix, install_cmd)
+
+
+def install_environment_locked(
+        prefix: Prefix,
+        version: str,
+        lockfile: str,
+) -> None:
+    envdir = lang_base.environment_dir(prefix, ENVIRONMENT_DIR, version)
+    venv_cmd = [sys.executable, '-mvirtualenv', envdir]
+    python = norm_version(version)
+    if python is not None:
+        venv_cmd.extend(('-p', python))
+
+    cmd_output_b(*venv_cmd, cwd='/')
+    with in_env(prefix, version):
+        lang_base.setup_cmd(
+            prefix,
+            ('python', '-mpip', 'install', '--require-hashes', '-r', lockfile),
+        )
+        lang_base.setup_cmd(
+            prefix,
+            (
+                'python', '-mpip', 'install',
+                '--no-deps', '--no-build-isolation', '.',
+            ),
+        )
