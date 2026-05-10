@@ -11,6 +11,8 @@ from pre_commit.clientlib import load_config
 from pre_commit.clientlib import load_manifest
 from pre_commit.clientlib import LOCAL
 from pre_commit.clientlib import META
+from pre_commit.errors import FatalError
+from pre_commit.repository import install_key_for_hook
 from pre_commit.store import Store
 from pre_commit.util import rmtree
 
@@ -20,14 +22,19 @@ def _mark_used_repos(
         all_repos: dict[tuple[str, str], str],
         unused_repos: set[tuple[str, str]],
         repo: dict[str, Any],
+        config_path: str,
 ) -> None:
     if repo['repo'] == META:
         return
     elif repo['repo'] == LOCAL:
         for hook in repo['hooks']:
-            deps = hook.get('additional_dependencies')
+            deps, python_lockfile_sha256 = install_key_for_hook(
+                hook, config_path,
+            )
             unused_repos.discard((
-                store.db_repo_name(repo['repo'], deps),
+                store.db_repo_name(
+                    repo['repo'], deps, python_lockfile_sha256,
+                ),
                 C.LOCAL_REPO_VERSION,
             ))
     else:
@@ -49,12 +56,14 @@ def _mark_used_repos(
             if hook['id'] not in by_id:
                 continue
 
-            deps = hook.get(
-                'additional_dependencies',
-                by_id[hook['id']]['additional_dependencies'],
+            hook_dct = dict(by_id[hook['id']])
+            hook_dct.update(hook)
+            deps, python_lockfile_sha256 = install_key_for_hook(
+                hook_dct, config_path,
             )
             unused_repos.discard((
-                store.db_repo_name(repo['repo'], deps), repo['rev'],
+                store.db_repo_name(repo['repo'], deps, python_lockfile_sha256),
+                repo['rev'],
             ))
 
 
@@ -73,12 +82,14 @@ def _gc(store: Store) -> int:
         for config_path in configs:
             try:
                 config = load_config(config_path)
-            except InvalidConfigError:
+            except (InvalidConfigError, FatalError):
                 dead_configs.append(config_path)
                 continue
             else:
                 for repo in config['repos']:
-                    _mark_used_repos(store, all_repos, unused_repos, repo)
+                    _mark_used_repos(
+                        store, all_repos, unused_repos, repo, config_path,
+                    )
 
         paths = [(path,) for path in dead_configs]
         db.executemany('DELETE FROM configs WHERE path = ?', paths)

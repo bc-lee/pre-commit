@@ -111,6 +111,33 @@ def test_gc_unused_local_repo_with_env(store, in_git_dir, cap_out):
     _remove_config_assert_cleared(store, cap_out)
 
 
+def test_gc_preserves_python_lockfile_repo(
+        tempdir_factory, store, in_git_dir, cap_out,
+):
+    path = make_repo(tempdir_factory, 'python_hooks_repo')
+    with open('requirements.txt', 'w') as f:
+        f.write('identify==2.6.10\n')
+    config = make_config_from_repo(path)
+    config['hooks'][0]['python_lockfile'] = 'requirements.txt'
+    write_config('.', config)
+    store.mark_config_used(C.CONFIG_FILE)
+
+    all_hooks(load_config(C.CONFIG_FILE), store)
+
+    assert _config_count(store) == 1
+    assert _repo_count(store) == 2
+    assert not gc(store)
+    assert _config_count(store) == 1
+    assert _repo_count(store) == 2
+    assert cap_out.get().splitlines()[-1] == '0 repo(s) removed.'
+
+    os.remove(C.CONFIG_FILE)
+    assert not gc(store)
+    assert _config_count(store) == 0
+    assert _repo_count(store) == 0
+    assert cap_out.get().splitlines()[-1] == '2 repo(s) removed.'
+
+
 def test_gc_config_with_missing_hook(
         tempdir_factory, store, in_git_dir, cap_out,
 ):
