@@ -18,7 +18,7 @@ def check_all_hooks_match_files(config_file: str) -> int:
     )
     retv = 0
 
-    for hook in all_hooks(config, Store()):
+    for hook in all_hooks(config, Store(), config_file):
         if hook.always_run or hook.language == 'fail':
             continue
         elif not any(classifier.filenames_for_hook(hook)):

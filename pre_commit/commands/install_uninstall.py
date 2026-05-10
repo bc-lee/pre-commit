@@ -142,7 +142,9 @@ def install(
 
 
 def install_hooks(config_file: str, store: Store) -> int:
-    install_hook_envs(all_hooks(load_config(config_file), store), store)
+    install_hook_envs(
+        all_hooks(load_config(config_file), store, config_file), store,
+    )
     return 0
 
 
